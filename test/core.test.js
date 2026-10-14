@@ -21,3 +21,22 @@ test('montos comunes con palabras y números',()=>{for(const text of ['3 millone
 test('fecha y monto por conversación sin etiquetas',()=>{let p=receive(createProspect('a','A'),'2');p=receive(p,'Infonavit');p=receive(p,'MARZO 2015');p=receive(p,'Puebla');p=receive(p,'Puebla');p=receive(p,'3 millones');assert.equal(p.profile.fechaCredito,'03/2015');assert.equal(p.profile.valor,'3000000');});
 test('plazo en años no se confunde con saldo en pesos',()=>{let p=receive(createProspect('a','A'),'2');p=receive(p,'Institución: Infonavit; Fecha: marzo 2015; Ciudad: Puebla; Estado: Puebla; Valor: tres millones');for(const value of ['13 AÑOS','trece años','me faltan 13 años']){const r=receive(p,value);assert.equal(r.profile.saldo,undefined);assert.ok(r.notes.some(n=>n.includes(value)));assert.match(r.messages.at(-1).text,/Cuánto dinero/);assert.equal(r.profile.valor,'3000000');}p=receive(p,'13 años');p=receive(p,'900 mil');assert.equal(p.profile.saldo,'900000');assert.ok(p.notes.some(n=>n.includes('13 años')));});
 test('corrige ciudad mal guardada sin perder otros datos ni historial',()=>{const p=createProspect('a','A');p.product='Compra de vivienda';p.profile={ciudad:'HOLA QUIERO COMPRAR UNA VIVIENDA',credito:'1500000'};const data={version:1,selected:'a',prospects:[p]};const r=load({getItem:()=>JSON.stringify(data)}).prospects[0];assert.equal(r.profile.ciudad,undefined);assert.equal(r.profile.credito,'1500000');assert.deepEqual(r.messages,p.messages);});
+
+test('enganche acepta porcentaje numérico y escrito sin convertirlo en pesos',()=>{
+ for(const value of ['10%','diez por ciento','el diez por ciento de enganche']){
+  let p=receive(createProspect('pct','Prueba'),'Ciudad: Puebla; Estado: Puebla; Precio: 2 millones');
+  p=receive(p,value);
+  assert.equal(p.profile.enganche,'10%');
+  assert.match(p.messages.at(-1).text,/asalariado/);
+  assert.equal(edit(p,'precio','3 millones').profile.enganche,'10%');
+ }
+ assert.equal(edit(createProspect('p','P'),'enganche','veinticinco por ciento').profile.enganche,'25%');
+ assert.equal(edit(createProspect('p','P'),'enganche','0%').profile.enganche,'0%');
+ assert.equal(edit(createProspect('p','P'),'enganche','100%').profile.enganche,'100%');
+ assert.throws(()=>edit(createProspect('p','P'),'enganche','110%'));
+ assert.throws(()=>edit(createProspect('p','P'),'enganche','-10%'));
+ assert.throws(()=>edit(createProspect('p','P'),'precio','10%'));
+ const skipped=receive(receive(createProspect('p','P'),'Ciudad: Puebla; Estado: Puebla; Precio: 2 millones'),'No sé');
+ assert.equal(skipped.profile.enganche,undefined);
+ assert.ok(skipped.skipped.includes('enganche'));
+});

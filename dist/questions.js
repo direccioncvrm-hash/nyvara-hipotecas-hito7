@@ -12,8 +12,7 @@ export const fields=[
  ['ciudad','Ciudad','¿En qué ciudad te gustaría comprar?'],
  ['estado','Estado','¿En qué estado se encuentra esa ciudad?'],
  ['precio','Precio de vivienda','¿Cuál es el precio aproximado de la vivienda? Es distinto del préstamo que necesitas.','money'],
- ['credito','Crédito solicitado','¿Qué monto de préstamo buscas? Puedes indicar “no sé” si aún no lo conoces.','money'],
- ['enganche','Enganche','¿Con cuánto enganche contarías, aproximadamente?','money'],
+ ['enganche','Enganche','¿Cuánto tienes contemplado aportar de enganche? Si aún no lo sabes, podemos revisarlo contigo.','money'],
  ['actividad','Actividad laboral','¿Eres asalariado, independiente o ambos?','activity'],
  ['ingreso','Ingreso mensual','¿Cuál es tu ingreso mensual aproximado? Puedes compartir un rango.'],
  ['conyuge','Sumar ingresos','¿Te interesaría sumar ingresos con tu cónyuge?','yesno'],
@@ -34,6 +33,7 @@ export const refinanceFields=[
  ['actividad','Actividad laboral','¿Eres asalariado, independiente o ambos?','activity'],
  ['ingreso','Ingreso mensual','¿Cuál es tu ingreso mensual aproximado? Puedes compartir un rango.']
 ].map(([key,label,question,type='text'])=>({key,label,question,type}));
-export const allFields=[...fields,...refinanceFields.filter(f=>!fields.some(a=>a.key===f.key))];
+export const allFields=[{key:'credito',label:'Crédito informado por el cliente',type:'money'},...fields,...refinanceFields.filter(f=>!fields.some(a=>a.key===f.key))];
 export const REFINANCE='Cambio de hipoteca más liquidez';
 export function fieldsFor(p){return p.product===REFINANCE?refinanceFields.filter(f=>f.key!=='liquidez'||p.profile.objetivo!=='mejorar condiciones'):fields;}
+

@@ -11,6 +11,12 @@ export function validate(key,raw){
  const f=allFields.find(f=>f.key===key);if(!f)throw Error('Campo desconocido.');
  const value=raw.trim();if(!value||value.length>300)throw Error('Escribe un dato de 1 a 300 caracteres.');
  if(['ciudad','estado'].includes(key)&&isPurchaseIntent(value))throw Error('Esa frase indica que quieres comprar. Escribe solo el nombre de la ciudad o estado.');
+ if(key==='enganche'&&/%|por\s+ciento/i.test(value)){
+  const match=normalize(value).match(/^(?:el\s+)?(.+?)\s*(?:%|por ciento)(?:\s+de enganche)?$/);
+  const percentage=match?parseMoney(match[1]):NaN;
+  if(!Number.isFinite(percentage)||percentage<0||percentage>100)throw Error('Indica un porcentaje entre 0% y 100%, por ejemplo 10% o diez por ciento.');
+  return String(percentage)+'%';
+ }
  if(f.type==='money'){
   const n=parseMoney(value);
   if(!Number.isFinite(n))throw Error('No pude identificar un solo monto. Puedes escribir 3000000, 3 millones o tres millones.');
@@ -86,12 +92,12 @@ export function receive(p,text,now=new Date().toISOString()){
  if(input.includes(':')){
   for(const part of input.split(/[;\n]/).filter(s=>s.trim())){
    const colon=part.indexOf(':');const key=aliases[normalize(part.slice(0,colon))];
-   if(colon<0||!key||!fieldsFor(r).some(f=>f.key===key))return reply('No pude identificar todos los campos de este producto. Usa las etiquetas de la ficha, separadas por punto y coma. No cambié la ficha.');
+   if(colon<0||!key||!(fieldsFor(r).some(f=>f.key===key)||(key==='credito'&&r.product!==REFINANCE)))return reply('No pude identificar todos los campos de este producto. Usa las etiquetas de la ficha, separadas por punto y coma. No cambié la ficha.');
    entries.push([key,part.slice(colon+1)]);
   }
  }else{
   const f=nextField(r);
-  if(!f)return reply('Puedes corregir la ficha a la derecha o escribir una etiqueta, por ejemplo: Crédito: 1800000.');
+  if(!f)return reply('Puedes corregir la ficha a la derecha o escribir una etiqueta, por ejemplo: Enganche: 300000.');
   if(input.length>100||/[?!¿]/.test(input)||(f.type!=='money'&&/\by\b/.test(n)))return reply('Este recorrido es guiado. Para varios datos usa etiquetas separadas por punto y coma, o responde solo al dato pendiente: '+f.question);
   entries=[[f.key,input]];
  }
@@ -102,7 +108,9 @@ export function receive(p,text,now=new Date().toISOString()){
   return reply('Ficha actualizada. '+(nextField(r)?.question||'Gracias, ya reunimos tu perfil inicial. ¿Cómo y cuándo prefieres que Arturo te contacte? Completa «Solicitar contacto»; quedará pendiente de confirmación.'));
  }catch(e){return reply(e.message+' No cambié los datos anteriores.');}
 }
-export function summary(p){return ['NYVARA · DEMO CON DATOS FICTICIOS',p.name,p.product||'Producto pendiente','Estado: '+p.status,'Responsable: '+(stopped(p)?'Arturo':'NYVARA'),...fieldsFor(p).map(f=>`${f.label}: ${p.profile[f.key]||'Pendiente'}`),'Interés: '+(p.interest?.level||'por confirmar'),...(p.interest?['Evidencia: '+p.interest.evidence]:[]),...(p.contact?['Solicitud: pendiente de confirmación','Medio: '+(p.contact.channel||'Pendiente'),'Contacto de prueba: '+(p.contact.detail||'Pendiente'),'Preferencia: '+(p.contact.immediate?'Lo antes posible':p.contact.when||'Pendiente'),'Zona: '+(p.contact.zone||'Pendiente')]:[]),...(p.crmCapturedAt?['Captura en CRM declarada por Arturo: '+p.crmCapturedAt+' (sin verificación externa)']:[]),'IA y WhatsApp sin conectar. Sin cita confirmada.',...(p.notes.length?['Notas: '+p.notes.join(' | ')]:[])].join('\n');}
+export function summary(p){return ['NYVARA · DEMO CON DATOS FICTICIOS',p.name,p.product||'Producto pendiente','Estado: '+p.status,'Responsable: '+(stopped(p)?'Arturo':'NYVARA'),...fieldsFor(p).map(f=>`${f.label}: ${p.profile[f.key]||'Pendiente'}`),...(p.product!==REFINANCE&&p.profile.credito?['Crédito informado por el cliente: '+p.profile.credito]:[]),'Interés: '+(p.interest?.level||'por confirmar'),...(p.interest?['Evidencia: '+p.interest.evidence]:[]),...(p.contact?['Solicitud: pendiente de confirmación','Medio: '+(p.contact.channel||'Pendiente'),'Contacto de prueba: '+(p.contact.detail||'Pendiente'),'Preferencia: '+(p.contact.immediate?'Lo antes posible':p.contact.when||'Pendiente'),'Zona: '+(p.contact.zone||'Pendiente')]:[]),...(p.crmCapturedAt?['Captura en CRM declarada por Arturo: '+p.crmCapturedAt+' (sin verificación externa)']:[]),'IA y WhatsApp sin conectar. Sin cita confirmada.',...(p.notes.length?['Notas: '+p.notes.join(' | ')]:[])].join('\n');}
+
+
 
 
 
