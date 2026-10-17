@@ -9,6 +9,33 @@ import {handleRequest} from '../api/whatsapp.js';
 const turn = overrides=>({product:'sin_cambio',handoff:false,updates:[],skip:false,answer:'',...overrides});
 const state = ()=>({...initialState(),product:'Compra de vivienda',profile:{ciudad:'Xalapa',estado:'Veracruz',precio:'2000000'}});
 const message = (body, sid='1', from='whatsapp:+15555550100')=>({From:from,MessageSid:'SM'+sid.repeat(32),Body:body});
+test('reported live sequence: full price sentence, repeated price, mistaken down payment and explicit correction',async()=>{
+  const noModel=()=>{throw Error('simple monetary answer must not depend on model');};
+  let s={...initialState(),product:'Compra de vivienda',profile:{ciudad:'Xalapa',estado:'Veracruz'}};
+  let r=await advance(s,'La vivienda cuesta dos millones de pesos.',{},noModel);
+  assert.equal(r.state.profile.precio,'2000000');assert.match(r.reply,/aportar de enganche/);
+  assert.ok(!r.reply.includes('no pude validar'));
+  r=await advance(r.state,'El precio es 2 MILLONES',{},noModel);
+  assert.equal(r.state.profile.enganche,undefined);assert.match(r.reply,/enganche/);
+  r=await advance(r.state,'2,000,000',{},noModel);
+  assert.equal(r.state.profile.enganche,'2000000');assert.match(r.reply,/asalariado/);
+  r=await advance(r.state,'Corrijo: mi enganche es diez por ciento.',{},noModel);
+  assert.equal(r.state.profile.enganche,'10%');assert.equal(r.state.profile.precio,'2000000');
+});
+test('only server follow-up is shown on data answers and stale identical fields do not cause errors',async()=>{
+  const r=await advance(state(),'Soy asalariado',{},async()=>turn({updates:[
+    {key:'ciudad',value:'Xalapa',evidence:'old'},
+    {key:'actividad',value:'asalariado',evidence:'asalariado'}
+  ],answer:'Gracias. ¿Cuánto darías? ¿Quieres ayuda?'}));
+  assert.ok(!r.reply.includes('Gracias'));assert.ok(!r.reply.includes('no pude validar'));
+  assert.equal((r.reply.match(/¿/g)||[]).length,1);assert.match(r.reply,/enganche/);
+});
+test('hypothetical amount does not trigger deterministic write and model question is suppressed',async()=>{
+  let called=false;
+  const r=await advance(state(),'¿Y si aportara diez por ciento?',{},async()=>{called=true;return turn({answer:'Depende de evaluación. ¿Cuánto quieres aportar?'});});
+  assert.equal(called,true);assert.equal(r.state.profile.enganche,undefined);
+  assert.ok(!r.reply.includes('¿Cuánto quieres aportar?'));assert.match(r.reply,/Depende de evaluación/);
+});
 function memory() {
   const states=new Map(), done=new Set(), locks=new Set();
   return {states,done,locks,
