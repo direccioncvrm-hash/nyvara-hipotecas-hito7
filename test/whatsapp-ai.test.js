@@ -158,3 +158,26 @@ test('activated webhook authenticates before accessing storage; disabled mode re
   const off=await handleRequest('POST',sign(p),p,{...env,NYVARA_AI_ENABLED:'false'});
   assert.match(off[2],/conexión de prueba recibida/);
 });
+
+test('refinance full sentences: property value, outstanding balance and monthly payment',async()=>{
+  let s={...initialState(),product:'Cambio de hipoteca más liquidez',profile:{institucion:'BBVA',fechaCredito:'03/2021',ciudad:'Puebla',estado:'Puebla'}};
+  const noModel=()=>{throw Error('must parse affirmative amount directly');};
+  for (const [text,key,expected] of [
+    ['El valor actual de mi vivienda es de tres millones de pesos.','valor','3000000'],
+    ['Debo un millón de pesos.','saldo','1000000'],
+    ['Pago quince mil pesos al mes.','mensualidad','15000'],
+    ['Corrijo: mi saldo pendiente es de novecientos mil pesos.','saldo','900000']
+  ]) {
+    const r=await advance(s,text,{},noModel);s=r.state;
+    assert.equal(s.profile[key],expected);assert.ok(!r.reply.includes('no pude validar'));
+  }
+  assert.equal(s.profile.valor,'3000000');assert.equal(s.profile.mensualidad,'15000');
+});
+test('refinance hypothetical and ambiguous money sentences do not bypass model',async()=>{
+  const s={...initialState(),product:'Cambio de hipoteca más liquidez',profile:{}};
+  for(const text of ['Si debo un millón de pesos, ¿qué pasa?','Debo un millón o dos millones','Pago quince mil pesos y debo un millón']) {
+    let called=false;
+    const r=await advance(s,text,{},async()=>{called=true;return turn();});
+    assert.ok(called);assert.deepEqual(r.state.profile,{});
+  }
+});
