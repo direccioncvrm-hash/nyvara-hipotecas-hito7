@@ -1,0 +1,9 @@
+{
+  "regions": ["iad1"],
+  "functions": {
+    "api/whatsapp.js": {
+      "maxDuration": 15,
+      "includeFiles": "dist/**"
+    }
+  }
+}
