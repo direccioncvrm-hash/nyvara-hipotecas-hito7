@@ -1,5 +1,6 @@
 import {createHash, randomBytes, timingSafeEqual} from 'node:crypto';
 import {profileSummary} from '../lib/whatsapp-ai.js';
+import {ATTENTION,changeAttention} from '../lib/whatsapp-attention.js';
 
 const cookieName = '__Host-nyvara';
 const digest = value => createHash('sha256').update(value).digest('hex');
@@ -10,7 +11,7 @@ export async function dashboard(req, env, command) {
   const secret = env.NYVARA_ADMIN_PASSWORD;
   if (!secret || secret.length < 32) return result(503,{error:'Acceso pendiente de configuración.'});
   const method = req.method;
-  if (!['GET','POST','DELETE'].includes(method)) return result(405,{error:'Método no permitido.'});
+  if (!['GET','POST','DELETE','PATCH'].includes(method)) return result(405,{error:'Método no permitido.'});
   if (method !== 'GET') {
     let origin;
     try { origin = new URL(env.TWILIO_WEBHOOK_URL).origin; } catch { return result(503,{error:'Configuración pendiente.'}); }
@@ -38,6 +39,24 @@ export async function dashboard(req, env, command) {
   }
   if (!/^[a-f0-9]{64}$/.test(raw) || await command(['GET',sessionKey]) !== '1') return result(401,{error:'Inicia sesión para consultar las fichas.'});
   const senders = [...new Set((env.NYVARA_TEST_SENDERS || '').split(/[\s,;]+/).filter(x=>/^whatsapp:\+\d{8,15}$/.test(x)))];
+  if (method === 'PATCH') {
+    let body=req.body;
+    if(Buffer.isBuffer(body)) body=body.toString('utf8');
+    if(typeof body==='string'){try{body=JSON.parse(body);}catch{body=null;}}
+    if(!body || !['take','return','resolve'].includes(body.action) || !/^[a-f0-9]{40}$/.test(body.revision || '')) return result(400,{error:'Acción no válida.'});
+    const sender=senders.find(x=>digest(x)===body.id);
+    if(!sender) return result(404,{error:'Ficha no disponible.'});
+    const base=`nyvara:hipotecas:7b:${digest(sender)}`;
+    const current=await command(['GET',`${base}:state`]);
+    if(!current) return result(404,{error:'La ficha ya no está disponible.'});
+    if(createHash('sha1').update(current).digest('hex')!==body.revision) return result(409,{error:'La conversación cambió. Actualiza las fichas e intenta de nuevo.'});
+    const updated=changeAttention(JSON.parse(current),body.action);
+    const outcome=await command(['EVAL',ATTENTION,2,`${base}:lock`,`${base}:state`,body.action,body.revision,JSON.stringify(updated)]);
+    if(outcome==='missing') return result(404,{error:'La ficha ya no está disponible.'});
+    if(outcome==='busy' || outcome==='stale') return result(409,{error:'La conversación cambió o está procesando un mensaje. Actualiza las fichas e intenta de nuevo.'});
+    if(outcome!=='ok') throw Error('storage_invalid');
+    return result(200,{ok:true});
+  }
   if (!senders.length) return result(200,{fichas:[]});
   const values = await command(['MGET',...senders.map(x=>`nyvara:hipotecas:7b:${digest(x)}:state`)]);
   if (!Array.isArray(values)) throw Error('storage_invalid');
@@ -45,7 +64,7 @@ export async function dashboard(req, env, command) {
     if (!value) return [];
     const state = JSON.parse(value);
     if (!state.product && !Object.keys(state.profile || {}).length) return [];
-    return [{contacto:`Prueba ${index+1} · termina en ${senders[index].slice(-4)}`, resumen:profileSummary(state), pausada:!!state.paused, solicitaAtencion:!!state.handoffRequested}];
+    return [{id:digest(senders[index]),revision:createHash('sha1').update(value).digest('hex'),contacto:`Prueba ${index+1} · termina en ${senders[index].slice(-4)}`, resumen:profileSummary(state), pausada:!!state.paused, atendiendo:!!state.humanActive, solicitaAtencion:!!state.handoffRequested}];
   });
   return result(200,{fichas});
 }
