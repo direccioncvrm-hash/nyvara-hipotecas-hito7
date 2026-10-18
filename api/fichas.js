@@ -27,9 +27,11 @@ export async function dashboard(req, env, command) {
     const attempts = await command(['EVAL',"local n=redis.call('INCR',KEYS[1]); if n==1 then redis.call('EXPIRE',KEYS[1],60) end; return n",1,'nyvara:admin:login']);
     if (attempts > 10) return result(429,{error:'Espera un minuto antes de intentar de nuevo.'});
     let body = req.body;
+    if (Buffer.isBuffer(body)) body = body.toString('utf8');
     if (typeof body === 'string') { try { body=JSON.parse(body); } catch { body=null; } }
     const password = body?.password;
-    if (typeof password !== 'string' || password.length > 512 || !timingSafeEqual(Buffer.from(digest(password)),Buffer.from(digest(secret)))) return result(401,{error:'Contraseña incorrecta.'});
+    if (typeof password !== 'string' || !password.length || password.length > 512) return result(400,{error:'No recibimos la contraseña correctamente. Recarga la página e intenta de nuevo.'});
+    if (!timingSafeEqual(Buffer.from(digest(password)),Buffer.from(digest(secret)))) return result(401,{error:'Contraseña incorrecta.'});
     const token = randomBytes(32).toString('hex');
     await command(['SET',`nyvara:admin:session:${digest(secret)}:${digest(token)}`,'1','EX',1800]);
     return result(200,{ok:true},{'Set-Cookie':cookie(token,1800)});
