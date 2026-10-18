@@ -1,6 +1,7 @@
 import {createHash, randomBytes, timingSafeEqual} from 'node:crypto';
 import {profileSummary} from '../lib/whatsapp-ai.js';
 import {ATTENTION,changeAttention} from '../lib/whatsapp-attention.js';
+import {describeProfile} from '../dist/dashboard-view.js';
 
 const cookieName = '__Host-nyvara';
 const digest = value => createHash('sha256').update(value).digest('hex');
@@ -63,8 +64,8 @@ export async function dashboard(req, env, command) {
   const fichas = values.flatMap((value,index)=>{
     if (!value) return [];
     const state = JSON.parse(value);
-    if (!state.product && !Object.keys(state.profile || {}).length) return [];
-    return [{id:digest(senders[index]),revision:createHash('sha1').update(value).digest('hex'),contacto:`Prueba ${index+1} · termina en ${senders[index].slice(-4)}`, resumen:profileSummary(state), pausada:!!state.paused, atendiendo:!!state.humanActive, solicitaAtencion:!!state.handoffRequested}];
+    if (!state.product && !Object.keys(state.profile || {}).length && !state.history?.length) return [];
+    return [{...describeProfile(state),id:digest(senders[index]),revision:createHash('sha1').update(value).digest('hex'),contacto:`Prueba ${index+1} · termina en ${senders[index].slice(-4)}`, resumen:profileSummary(state), pausada:!!state.paused, atendiendo:!!state.humanActive, solicitaAtencion:!!state.handoffRequested}];
   });
   return result(200,{fichas});
 }
