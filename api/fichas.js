@@ -61,11 +61,14 @@ export async function dashboard(req, env, command) {
   if (!senders.length) return result(200,{fichas:[]});
   const values = await command(['MGET',...senders.map(x=>`nyvara:hipotecas:7b:${digest(x)}:state`)]);
   if (!Array.isArray(values)) throw Error('storage_invalid');
+  const alertIds=values.map(value=>value?JSON.parse(value).alertId:null).filter(id=>/^SM[0-9a-f]{32}$/i.test(id || ''));
+  const alertValues=alertIds.length?await command(['MGET',...alertIds.map(id=>`nyvara:hipotecas:7b:alert:${id}`)]):[];
+  const alerts=new Map(alertIds.map((id,i)=>{let record;try{record=JSON.parse(alertValues?.[i] || 'null');}catch{}return [id,record?.status || 'unknown'];}));
   const fichas = values.flatMap((value,index)=>{
     if (!value) return [];
     const state = JSON.parse(value);
     if (!state.product && !Object.keys(state.profile || {}).length && !state.history?.length) return [];
-    return [{...describeProfile(state),id:digest(senders[index]),revision:createHash('sha1').update(value).digest('hex'),contacto:`Prueba ${index+1} · termina en ${senders[index].slice(-4)}`, resumen:profileSummary(state), pausada:!!state.paused, atendiendo:!!state.humanActive, solicitaAtencion:!!state.handoffRequested}];
+    return [{...describeProfile(state),aviso:state.alertId?(alerts.get(state.alertId)||'unknown'):'none',id:digest(senders[index]),revision:createHash('sha1').update(value).digest('hex'),contacto:`Prueba ${index+1} · termina en ${senders[index].slice(-4)}`, resumen:profileSummary(state), pausada:!!state.paused, atendiendo:!!state.humanActive, solicitaAtencion:!!state.handoffRequested}];
   });
   return result(200,{fichas});
 }

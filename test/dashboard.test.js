@@ -3,6 +3,17 @@ import assert from 'node:assert/strict';
 import {dashboard} from '../api/fichas.js';
 const env={NYVARA_ADMIN_PASSWORD:'a'.repeat(40),TWILIO_WEBHOOK_URL:'https://example.com/api/whatsapp',NYVARA_TEST_SENDERS:'whatsapp:+15550000001'};
 function setup(){const db=new Map();let reads=0;const command=async args=>{const [op,key,value]=args;if(op==='EVAL')return 1;if(op==='SET'){db.set(key,value);return 'OK';}if(op==='GET')return db.get(key)||null;if(op==='DEL'){db.delete(key);return 1;}if(op==='MGET'){reads++;return [JSON.stringify({product:'compra',profile:{ciudad:'Puebla'},skipped:[],paused:true,handoffRequested:true})];}throw Error(op);};return {command,db,get reads(){return reads;}};}
+test('authenticated dashboard reports alert outcome without exposing provider IDs or recipient',async()=>{
+ const s=setup();const id='SM'+'a'.repeat(32);
+ const command=async args=>{
+ if(args[0]!=='MGET')return s.command(args);
+ if(args[1].includes(':alert:'))return [JSON.stringify({status:'accepted',sid:'SM'+'b'.repeat(32)})];
+ return [JSON.stringify({product:'Compra de vivienda',profile:{},skipped:[],paused:true,handoffRequested:true,alertId:id})];
+ };
+ const login=await dashboard({method:'POST',headers:{origin:'https://example.com'},body:{password:env.NYVARA_ADMIN_PASSWORD}},env,command);
+ const data=await dashboard({method:'GET',headers:{cookie:login.headers['Set-Cookie'].split(';')[0]}},env,command);
+ assert.equal(data.body.fichas[0].aviso,'accepted');assert.ok(!JSON.stringify(data.body).includes(id));
+});
 test('dashboard denies missing configuration and anonymous access without reading profiles',async()=>{const s=setup();assert.equal((await dashboard({method:'GET',headers:{}},{},s.command)).status,503);assert.equal((await dashboard({method:'GET',headers:{}},env,s.command)).status,401);assert.equal(s.reads,0);});
 test('login rejects cross-origin and incorrect passwords',async()=>{const s=setup();assert.equal((await dashboard({method:'POST',headers:{origin:'https://evil.com'},body:{password:env.NYVARA_ADMIN_PASSWORD}},env,s.command)).status,403);assert.equal((await dashboard({method:'POST',headers:{origin:'https://example.com'},body:{password:'wrong'}},env,s.command)).status,401);});
 test('session permits masked read-only profiles and logout revokes it',async()=>{const s=setup();const login=await dashboard({method:'POST',headers:{origin:'https://example.com'},body:{password:env.NYVARA_ADMIN_PASSWORD}},env,s.command);assert.equal(login.status,200);assert.match(login.headers['Set-Cookie'],/HttpOnly; Secure; SameSite=Strict/);const cookie=login.headers['Set-Cookie'].split(';')[0];const req={method:'GET',headers:{cookie}};const data=await dashboard(req,env,s.command);assert.equal(data.status,200);assert.equal(data.headers['Cache-Control'],'no-store');assert.equal(data.body.fichas.length,1);assert.ok(!JSON.stringify(data.body).includes('+15550000001'));await dashboard({method:'DELETE',headers:{cookie,origin:'https://example.com'}},env,s.command);assert.equal((await dashboard(req,env,s.command)).status,401);});

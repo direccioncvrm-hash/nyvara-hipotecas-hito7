@@ -18,7 +18,7 @@ async function refresh(){
     const next=JSON.stringify(fichas);
     if(signature!==next){signature=next;render();}else{updateTimes();}
     $('updated').textContent='Última actualización: '+new Date().toLocaleTimeString('es-MX');
-    $('status').textContent='Panel actualizado. No se han enviado avisos externos.';
+    $('status').textContent='Panel actualizado. Consulta el estado del aviso en cada solicitud.';
   } finally {loading=false;}
 }
 function render(){
@@ -34,7 +34,10 @@ function render(){
     const card=document.createElement('article');card.className='panel wa-card'+(ficha.solicitaAtencion?' wa-pending':'');
     const title=document.createElement('h2');title.textContent=ficha.contacto;
     const state=document.createElement('p');state.textContent=ficha.atendiendo?'Arturo está atendiendo · IA pausada':ficha.pausada?'IA pausada': 'IA disponible';
-    if(ficha.solicitaAtencion)state.textContent+=' · Solicitud de atención registrada (sin aviso enviado)';
+    if(ficha.solicitaAtencion){
+      const labels={accepted:'Aviso aceptado por Twilio; entrega no confirmada',rejected:'Twilio rechazó el aviso; revisar registros',configuration:'Aviso no enviado: revisar configuración',unknown:'Aviso sin resultado confirmado; revisar Twilio antes de reintentar',none:'Sin aviso enviado'};
+      state.textContent+=' · Solicitud de atención registrada · '+(labels[ficha.aviso]||labels.unknown);
+    }
     const meta=document.createElement('p');meta.className='wa-meta';meta.textContent='Primer contacto: '+displayDate(ficha.firstContactAt)+' · Último mensaje: '+displayDate(ficha.lastCustomerMessageAt)+' (hora de Ciudad de México)';
     const age=document.createElement('p');age.dataset.last=ficha.lastCustomerMessageAt||'';age.textContent=ageLabels[ageGroup(ficha.lastCustomerMessageAt)];
     const progress=document.createElement('p');progress.textContent=({inicio:'Solo inicio',proceso:'Ficha en proceso',completa:'Ficha completa'})[ficha.stage]+' · '+ficha.filled+'/'+ficha.total+' datos · Siguiente acción: '+nextAction(ficha);
