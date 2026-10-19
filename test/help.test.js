@@ -3,6 +3,24 @@ import assert from 'node:assert/strict';
 import {advance,initialState} from '../lib/whatsapp-ai.js';
 const empty=async()=>({product:'sin_cambio',handoff:false,updates:[],skip:false,answer:''});
 const start=()=>({...initialState(),product:'Compra de vivienda',profile:{ciudad:'Puebla',estado:'Puebla',precio:'2000000'}});
+test('model handoff alone cannot pause or reopen a resolved request from unrelated text',async()=>{
+ const state={...initialState(),product:'Compra de vivienda',handoffRequested:false,history:[{role:'user',content:'SÍ'}]};
+ const wrong=async()=>({...await empty(),handoff:true});
+ const first=await advance(state,'Las paredes son blanca',{},wrong);
+ assert.equal(first.state.paused,false);
+ assert.equal(first.state.handoffRequested,false);
+ assert.equal(first.state.helpAttempts.count,1);
+ const second=await advance(first.state,'Las paredes son blancas',{},wrong);
+ assert.equal(second.state.helpOffer.field,'ciudad');
+ const declined=await advance(second.state,'NO',{},wrong);
+ assert.equal(declined.state.paused,false);
+ assert.equal(declined.state.handoffRequested,false);
+ assert.ok(!declined.state.helpOffer);
+ const ambiguous=await advance(state,'¿Arturo podría ayudarme?',{},wrong);
+ assert.ok(ambiguous.state.helpOffer);
+ assert.equal(ambiguous.state.paused,false);
+ assert.equal(ambiguous.state.handoffRequested,false);
+});
 test('unrelated answer cannot skip price even when model requests skip',async()=>{
  const state={...initialState(),product:'Compra de vivienda',profile:{ciudad:'Xalapa',estado:'Veracruz'}};
  const mistaken=async()=>({...await empty(),skip:true});
