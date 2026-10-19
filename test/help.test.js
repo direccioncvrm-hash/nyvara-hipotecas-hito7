@@ -3,6 +3,23 @@ import assert from 'node:assert/strict';
 import {advance,initialState} from '../lib/whatsapp-ai.js';
 const empty=async()=>({product:'sin_cambio',handoff:false,updates:[],skip:false,answer:''});
 const start=()=>({...initialState(),product:'Compra de vivienda',profile:{ciudad:'Puebla',estado:'Puebla',precio:'2000000'}});
+test('unrelated answer cannot skip price even when model requests skip',async()=>{
+ const state={...initialState(),product:'Compra de vivienda',profile:{ciudad:'Xalapa',estado:'Veracruz'}};
+ const mistaken=async()=>({...await empty(),skip:true});
+ const first=await advance(state,'La casa tiene ventanas azules.',{},mistaken);
+ assert.deepEqual(first.state.skipped,[]);
+ assert.equal(first.state.profile.precio,undefined);
+ assert.equal(first.state.helpAttempts.field,'precio');
+ assert.equal(first.state.helpAttempts.count,1);
+ assert.match(first.reply,/vivienda completa/);
+ const second=await advance(first.state,'Las paredes son blancas.',{},mistaken);
+ assert.equal(second.state.helpOffer.field,'precio');
+ assert.deepEqual(second.state.skipped,[]);
+ assert.ok(!second.state.paused);
+ const omitted=await advance(first.state,'OMITIR',{},mistaken);
+ assert.deepEqual(omitted.state.skipped,['precio']);
+ assert.ok(!omitted.state.helpAttempts);
+});
 async function offered(){const a=await advance(start(),'respuesta confusa',{},empty);assert.equal(a.state.helpAttempts.count,1);assert.match(a.reply,/enganche/);const b=await advance(a.state,'otra respuesta confusa',{},empty);assert.equal(b.state.helpOffer.field,'enganche');assert.ok(!b.state.handoffRequested);return b.state;}
 test('two unresolved turns ask consent; yes records contextual request and pauses without promising delivery',async()=>{
  const state=await offered();const result=await advance(state,'Sí, por favor',{},()=>{throw Error('no AI needed');});
